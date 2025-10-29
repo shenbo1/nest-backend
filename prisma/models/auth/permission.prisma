@@ -1,0 +1,52 @@
+model Permission {
+  id             Int     @id @default(autoincrement())
+  permissionCode String  @unique @map("permission_code") @db.VarChar(31)
+  permissionName String  @map("permission_name")
+  description    String?
+  parentPermissionCode String? @map("parent_permission_code") @db.VarChar(31)
+
+  level        Int?
+  icon         String?
+  path         String // 资源名称，如: user, role, permission
+  action       String // 操作类型，如: create, read, update, delete
+  resourceType ResourceType @default(MENU) // 资源类型，如: 菜单 还是 API
+
+  deleted        Boolean          @default(false)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  createdBy      String?          @map("created_by") @db.VarChar(31)
+  updatedAt      DateTime?        @map("updated_at")
+  updatedBy      String?          @map("updated_by") @db.VarChar(31)
+  deletedAt      DateTime?        @map("deleted_at")
+  deletedBy      String?          @map("deleted_by") @db.VarChar(31)
+  RolePermission RolePermission[]
+
+  @@index([deleted])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id             Int    @id @default(autoincrement())
+  roleCode       String @db.VarChar(31)
+  permissionCode String @db.VarChar(31)
+
+  deleted   Boolean   @default(false)
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.VarChar(31)
+  updatedAt DateTime? @map("updated_at")
+  updatedBy String?   @map("updated_by") @db.VarChar(31)
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by") @db.VarChar(31)
+
+  role       Role       @relation(fields: [roleCode], references: [roleCode], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionCode], references: [permissionCode], onDelete: Cascade)
+
+  @@unique([roleCode, permissionCode])
+  @@index([roleCode])
+  @@index([deleted])
+  @@map("role_permission")
+}
+
+enum ResourceType {
+  MENU
+  API
+}
