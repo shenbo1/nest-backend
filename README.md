@@ -1,4 +1,3 @@
-
 # nest-backend
 
 简单的 NestJS 后端示例项目，包含 Redis 集成、JWT 登录示例和基本的开发脚本。
@@ -19,6 +18,8 @@
 
 ```bash
 pnpm install
+
+npx prisma generate
 ```
 
 2. 启动服务

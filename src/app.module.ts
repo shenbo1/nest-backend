@@ -8,6 +8,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { JwtAuthGuard } from "@/common/guard/jwt-auth.guard";
 import { ClsModule } from "nestjs-cls";
 import { PrismaService } from "./prisma/prisma.service";
+import { AuthModule } from './auth/auth.module';
 
 const envFilePath = process.env.NODE_ENV
   ? `.env.${process.env.NODE_ENV}`
@@ -27,6 +28,7 @@ const envFilePath = process.env.NODE_ENV
         mount: true,
       },
     }),
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [

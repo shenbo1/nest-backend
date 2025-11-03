@@ -1,0 +1,27 @@
+model User {
+  id       Int        @id @default(autoincrement())
+  userCode String     @unique @map("user_code") @db.VarChar(31)
+  userName String     @map("user_name")
+  email    String
+  password String     @db.VarChar(255)
+  avatar   String?
+  status   UserStatus @default(ACTIVE)
+
+  deleted   Boolean   @default(false)
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.VarChar(31)
+  updatedAt DateTime? @map("updated_at")
+  updatedBy String?   @map("updated_by") @db.VarChar(31)
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by") @db.VarChar(31)
+
+  roles UserRole[]
+
+  @@index([deleted])
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}

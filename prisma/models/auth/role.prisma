@@ -1,0 +1,41 @@
+model Role {
+  id          Int     @id @default(autoincrement())
+  roleCode    String  @unique @map("role_code") @db.VarChar(31)
+  roleName    String  @map("role_name")
+  description String?
+
+  userRoles       UserRole[]
+  userPermissions RolePermission[]
+
+  deleted   Boolean   @default(false)
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.VarChar(31)
+  updatedAt DateTime? @map("updated_at")
+  updatedBy String?   @map("updated_by") @db.VarChar(31)
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by") @db.VarChar(31)
+
+  @@index([deleted])
+  @@map("roles")
+}
+
+model UserRole {
+  id       Int    @id @default(autoincrement())
+  userCode String @db.VarChar(31)
+  roleCode String @db.VarChar(31)
+
+  deleted   Boolean   @default(false)
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.VarChar(31)
+  updatedAt DateTime? @map("updated_at")
+  updatedBy String?   @map("updated_by") @db.VarChar(31)
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by") @db.VarChar(31)
+
+  user User @relation(fields: [userCode], references: [userCode], onDelete: Cascade)
+  role Role @relation(fields: [roleCode], references: [roleCode], onDelete: Cascade)
+
+  @@unique([userCode, roleCode])
+  @@index([deleted])
+  @@map("user_role")
+}
