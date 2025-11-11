@@ -72,44 +72,6 @@ export class DifyController {
   }
 
   /**
-   * 阻塞式聊天
-   * @example POST /dify/chat { "query": "你好", "user": "user123", "conversationId": "abc" }
-   */
-  @Post("chat")
-  @ApiOperation({ summary: "阻塞式聊天" })
-  async chat(@Body() createChatDto: CreateChatDto) {
-    const { query, user, conversation_id } = createChatDto;
-    return this.difyService.chat(query, user, conversation_id);
-  }
-
-  /**
-   * 获取会话列表
-   * @example GET /dify/conversations?user=user123&limit=20
-   */
-  @Get("conversations")
-  @ApiOperation({ summary: "获取会话列表" })
-  @ApiQuery({ name: "limit", required: false, description: "返回数量" })
-  async getConversations(
-    @Query("user") user: string,
-    @Query("limit") limit?: number
-  ) {
-    return this.difyService.getConversations(user, limit);
-  }
-
-  /**
-   * 获取消息列表
-   * @example GET /dify/conversations/:id/messages?user=user123
-   */
-  @Get("conversations/:id/messages")
-  @ApiOperation({ summary: "获取会话消息列表(Dify API)" })
-  async getConversationMessagesFromDify(
-    @Param("id") conversationId: string,
-    @Query("user") user: string
-  ) {
-    return this.difyService.getMessages(user, conversationId);
-  }
-
-  /**
    * 获取应用信息
    * @example GET /dify/app-info
    */
@@ -135,16 +97,6 @@ export class DifyController {
   }
 
   /**
-   * 获取会话详细信息
-   * @example GET /dify/history/:conversationId/detail
-   */
-  @Get("history/:conversationId/detail")
-  @ApiOperation({ summary: "获取会话详细信息" })
-  async getConversationDetail(@Param("conversationId") conversationId: string) {
-    return this.difyService.getConversationDetail(conversationId);
-  }
-
-  /**
    * 获取特定会话的所有消息
    * @example GET /dify/history/:conversationId/messages
    */
@@ -157,29 +109,6 @@ export class DifyController {
   }
 
   /**
-   * 更新会话名称
-   * @example PATCH /dify/history/:conversationId/name
-   */
-  @Patch("history/:conversationId/name")
-  @ApiOperation({ summary: "更新会话名称" })
-  async updateConversationName(
-    @Param("conversationId") conversationId: string,
-    @Body("name") name: string
-  ) {
-    return this.difyService.updateConversationName(conversationId, name);
-  }
-
-  /**
-   * 归档会话
-   * @example POST /dify/history/:conversationId/archive
-   */
-  @Post("history/:conversationId/archive")
-  @ApiOperation({ summary: "归档会话" })
-  async archiveConversation(@Param("conversationId") conversationId: string) {
-    return this.difyService.archiveConversation(conversationId);
-  }
-
-  /**
    * 删除会话
    * @example DELETE /dify/history/:conversationId
    */
@@ -187,29 +116,5 @@ export class DifyController {
   @ApiOperation({ summary: "删除会话" })
   async deleteConversation(@Param("conversationId") conversationId: string) {
     return this.difyService.deleteConversationRecord(conversationId);
-  }
-
-  /**
-   * 获取用户的所有消息
-   * @example GET /dify/user-messages?userId=user123&limit=100
-   */
-  @Get("user-messages")
-  @ApiOperation({ summary: "获取用户的所有消息" })
-  @ApiQuery({ name: "limit", required: false, description: "返回数量" })
-  async getUserMessages(
-    @Query("userId") userId: string,
-    @Query("limit") limit?: number
-  ) {
-    return this.difyService.getUserMessages(userId, limit);
-  }
-
-  /**
-   * 删除消息
-   * @example DELETE /dify/messages/:id
-   */
-  @Delete("messages/:id")
-  @ApiOperation({ summary: "删除消息记录" })
-  async deleteMessage(@Param("id") id: number) {
-    return this.difyService.deleteMessage(id);
   }
 }

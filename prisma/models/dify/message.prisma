@@ -4,9 +4,9 @@ model DifyMessage {
     messageId      String @unique @map("message_id") @db.VarChar(255)
     userId         String @map("user_id") @db.VarChar(100)
 
-    // 消息类型: query(用户问题) 或 answer(AI回答)
-    type        MessageType
-    // 消息内容类型: text(文本)、image(图片)、file(文件)、audio(音频)、video(视频)等
+    // 消息角色: user(用户) 或 assistant(助手) 或 system(系统)
+    role        MessageRole
+    // 消息内容类型: text(文本)、image(图片)、card(卡片)、recommend(推荐)、file(文件)
     contentType MessageContentType @default(TEXT) @map("content_type")
     content     String             @db.Text
 
@@ -36,19 +36,16 @@ model DifyMessage {
     @@map("dify_messages")
 }
 
-enum MessageType {
-    QUERY // 用户问题
-    ANSWER // AI回答
+enum MessageRole {
+    USER // 用户
+    ASSISTANT // 助手
+    SYSTEM // 系统
 }
 
 enum MessageContentType {
     TEXT // 文本消息
     IMAGE // 图片
+    CARD // 卡片
+    RECOMMEND // 推荐
     FILE // 文件
-    AUDIO // 音频
-    VIDEO // 视频
-    MARKDOWN // Markdown格式
-    CODE // 代码
-    JSON // JSON数据
-    MIXED // 混合类型(包含多种格式)
 }
