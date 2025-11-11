@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { REDIS_DB } from '@/constants';
-import Redis from 'ioredis';
-import { ApiConfigService } from '@/config';
+import { Module } from "@nestjs/common";
+import { REDIS_DB } from "@/constants";
+import Redis from "ioredis";
+import { ApiConfigService } from "@/config";
 
 @Module({
   providers: [

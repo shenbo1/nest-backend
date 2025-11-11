@@ -1,8 +1,8 @@
-import { Controller, Get, Post } from '@nestjs/common';
-import { AppService } from './app.service';
-import * as jwt from 'jsonwebtoken';
-import { Public } from '@/common/guard/jwt-auth.guard';
-import { ApiConfigService } from './config';
+import { Controller, Get, Post } from "@nestjs/common";
+import { AppService } from "./app.service";
+import * as jwt from "jsonwebtoken";
+import { Public } from "@/common/guard/jwt-auth.guard";
+import { ApiConfigService } from "./config";
 
 @Controller()
 export class AppController {
@@ -13,7 +13,7 @@ export class AppController {
 
   @Get()
   getHello(): Promise<any> {
-    console.log('new', new Date(new Date().toLocaleString()));
+    console.log("new", new Date(new Date().toLocaleString()));
     return this.appService.getHello();
   }
 
@@ -21,7 +21,7 @@ export class AppController {
   @Post()
   login() {
     const { secret, expiresIn } = this.configService.jwtConfig;
-    const payload = { id: '1', userCode: 'admin' };
+    const payload = { id: "1", userCode: "admin" };
     const token = jwt.sign(payload, secret, {
       expiresIn,
     });

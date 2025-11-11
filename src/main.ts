@@ -23,7 +23,7 @@ async function bootstrap() {
           in: "header",
           name: "Authorization",
         },
-        "bearerAuth"
+        "bearerAuth",
       )
       .build();
     const document = SwaggerModule.createDocument(app, config);

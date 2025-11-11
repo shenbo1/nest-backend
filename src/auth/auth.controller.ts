@@ -12,10 +12,14 @@ import { CreateAuthDto } from "./dto/create-auth.dto";
 import { UpdateAuthDto } from "./dto/update-auth.dto";
 import { Public } from "@/common/guard/jwt-auth.guard";
 import { LoginDto } from "./dto/login.dto";
+import { PrismaService } from "@/prisma/prisma.service";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly prismaService: PrismaService,
+  ) {}
 
   @Public()
   @Post("login")
@@ -24,7 +28,16 @@ export class AuthController {
   }
 
   @Post()
-  create(@Body() createAuthDto: CreateAuthDto) {
+  async create(@Body() createAuthDto: CreateAuthDto) {
+    const ddd = await this.prismaService.user.create({
+      data: {
+        userCode: "user1",
+        userName: "普通用户",
+        email: "<EMAIL>",
+        password: "password",
+      },
+    });
+    console.log("ddd", ddd);
     return this.authService.create(createAuthDto);
   }
 

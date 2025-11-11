@@ -7,7 +7,7 @@ import { PrismaService } from "./prisma/prisma.service";
 export class AppService {
   constructor(
     @Inject(REDIS_DB) private readonly redis: Redis,
-    private prisma: PrismaService
+    private prisma: PrismaService,
   ) {}
   async getHello(): Promise<any> {
     await this.redis.set("mykey", "hello world");

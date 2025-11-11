@@ -10,7 +10,7 @@ import * as jwt from "jsonwebtoken";
 export class AuthService {
   constructor(
     private prisma: PrismaService,
-    private readonly configService: ApiConfigService
+    private readonly configService: ApiConfigService,
   ) {}
   async login(userCode: string, password: string) {
     const user = await this.prisma.user.findFirst({
