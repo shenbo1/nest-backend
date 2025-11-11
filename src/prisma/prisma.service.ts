@@ -68,7 +68,7 @@ export class PrismaService implements OnModuleInit {
         };
       }
     } catch {
-      // 忽略读取错误，保持空表
+      // 忽略读取错误,保持空表
     }
 
     const now = () => new Date();
@@ -325,7 +325,7 @@ export class PrismaService implements OnModuleInit {
     await this.client.$connect();
   }
 
-  // 暴露原生 delegate，兼容现有使用方式
+  // 暴露原生 delegate,兼容现有使用方式
   get user() {
     return this.client.user;
   }
@@ -340,6 +340,12 @@ export class PrismaService implements OnModuleInit {
   }
   get userRole() {
     return this.client.userRole;
+  }
+  get difyConversation() {
+    return this.client.difyConversation;
+  }
+  get difyMessage() {
+    return this.client.difyMessage;
   }
   /* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
   $transaction(...args: any[]) {

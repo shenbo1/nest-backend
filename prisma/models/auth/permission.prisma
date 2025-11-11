@@ -1,8 +1,8 @@
 model Permission {
-  id             Int     @id @default(autoincrement())
-  permissionCode String  @unique @map("permission_code") @db.VarChar(31)
-  permissionName String  @map("permission_name")
-  description    String?
+  id                   Int     @id @default(autoincrement())
+  permissionCode       String  @unique @map("permission_code") @db.VarChar(31)
+  permissionName       String  @map("permission_name")
+  description          String?
   parentPermissionCode String? @map("parent_permission_code") @db.VarChar(31)
 
   level        Int?

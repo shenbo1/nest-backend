@@ -19,11 +19,22 @@ export interface ApiConfig {
     secret: string;
     expiresIn: string;
   };
+  dify: {
+    baseUrl: string;
+    apiKey: string;
+  };
 }
 
 @Injectable()
 export class ApiConfigService {
   constructor(private configService: ConfigService) {}
+
+  get difyConfig(): ApiConfig["dify"] {
+    return {
+      baseUrl: this.configService.get<string>("DIFY_BASE_URL", "DIFY_URL"),
+      apiKey: this.configService.get<string>("DIFY_API_KEY", "DIFY_API_KEY"),
+    };
+  }
 
   get jwtConfig(): ApiConfig["jwt"] {
     return {

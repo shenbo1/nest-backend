@@ -1,0 +1,36 @@
+model DifyConversation {
+    id             Int    @id @default(autoincrement())
+    conversationId String @unique @map("conversation_id") @db.VarChar(255)
+    userId         String @map("user_id") @db.VarChar(100)
+
+    // 会话基本信息
+    name   String?            @db.VarChar(255) // 会话标题/名称
+    status ConversationStatus @default(ACTIVE) // 会话状态
+
+    // 统计信息
+    messageCount Int @default(0) @map("message_count") // 消息数量
+
+    // 会话元数据
+    metadata Json? // 存储会话相关的配置、上下文等
+
+    // 审计字段
+    deleted   Boolean   @default(false)
+    createdAt DateTime  @default(now()) @map("created_at")
+    createdBy String?   @map("created_by") @db.VarChar(100)
+    updatedAt DateTime  @updatedAt @map("updated_at")
+    updatedBy String?   @map("updated_by") @db.VarChar(100)
+    deletedAt DateTime? @map("deleted_at")
+    deletedBy String?   @map("deleted_by") @db.VarChar(100)
+
+    @@index([conversationId])
+    @@index([userId])
+    @@index([status])
+    @@index([createdAt])
+    @@map("dify_conversations")
+}
+
+enum ConversationStatus {
+    ACTIVE // 活跃中
+    ARCHIVED // 已归档
+    DELETED // 已删除
+}

@@ -101,6 +101,62 @@ CREATE TABLE `users` (
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- CreateTable
+CREATE TABLE `dify_conversations` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `conversation_id` VARCHAR(255) NOT NULL,
+    `user_id` VARCHAR(100) NOT NULL,
+    `name` VARCHAR(255) NULL,
+    `status` ENUM('ACTIVE', 'ARCHIVED', 'DELETED') NOT NULL DEFAULT 'ACTIVE',
+    `message_count` INTEGER NOT NULL DEFAULT 0,
+    `metadata` JSON NULL,
+    `deleted` BOOLEAN NOT NULL DEFAULT false,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `created_by` VARCHAR(100) NULL,
+    `updated_at` DATETIME(3) NOT NULL,
+    `updated_by` VARCHAR(100) NULL,
+    `deleted_at` DATETIME(3) NULL,
+    `deleted_by` VARCHAR(100) NULL,
+
+    UNIQUE INDEX `dify_conversations_conversation_id_key`(`conversation_id`),
+    INDEX `dify_conversations_conversation_id_idx`(`conversation_id`),
+    INDEX `dify_conversations_user_id_idx`(`user_id`),
+    INDEX `dify_conversations_status_idx`(`status`),
+    INDEX `dify_conversations_created_at_idx`(`created_at`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `dify_messages` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `conversation_id` VARCHAR(255) NOT NULL,
+    `message_id` VARCHAR(255) NOT NULL,
+    `user_id` VARCHAR(100) NOT NULL,
+    `type` ENUM('QUERY', 'ANSWER') NOT NULL,
+    `content_type` ENUM('TEXT', 'IMAGE', 'FILE', 'AUDIO', 'VIDEO', 'MARKDOWN', 'CODE', 'JSON', 'MIXED') NOT NULL DEFAULT 'TEXT',
+    `content` TEXT NOT NULL,
+    `parent_message_id` VARCHAR(255) NULL,
+    `metadata` JSON NULL,
+    `tokens` INTEGER NULL,
+    `latency` INTEGER NULL,
+    `deleted` BOOLEAN NOT NULL DEFAULT false,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `created_by` VARCHAR(100) NULL,
+    `updated_at` DATETIME(3) NOT NULL,
+    `updated_by` VARCHAR(100) NULL,
+    `deleted_at` DATETIME(3) NULL,
+    `deleted_by` VARCHAR(100) NULL,
+
+    UNIQUE INDEX `dify_messages_message_id_key`(`message_id`),
+    INDEX `dify_messages_conversation_id_idx`(`conversation_id`),
+    INDEX `dify_messages_user_id_idx`(`user_id`),
+    INDEX `dify_messages_message_id_idx`(`message_id`),
+    INDEX `dify_messages_created_at_idx`(`created_at`),
+    INDEX `dify_messages_parent_message_id_idx`(`parent_message_id`),
+    INDEX `dify_messages_content_type_idx`(`content_type`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- AddForeignKey
 ALTER TABLE `role_permission` ADD CONSTRAINT `role_permission_roleCode_fkey` FOREIGN KEY (`roleCode`) REFERENCES `roles`(`role_code`) ON DELETE CASCADE ON UPDATE CASCADE;
 

@@ -35,7 +35,7 @@ export class ResponseInterceptor implements NestInterceptor {
           message: "OK",
           data,
         } as ResponseFormat<any>;
-      }),
+      })
     );
   }
 }

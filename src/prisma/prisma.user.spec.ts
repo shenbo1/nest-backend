@@ -79,7 +79,7 @@ describe("PrismaService User audit & soft-delete", () => {
             email: `${userCode}@example.com`,
             password: "hashed",
           },
-        })
+        }),
     );
 
     expect(created).toBeTruthy();
@@ -105,14 +105,14 @@ describe("PrismaService User audit & soft-delete", () => {
           email: `${userCode}@example.com`,
           password: "hashed",
         },
-      })
+      }),
     );
 
     const updated = await runAs("tester_upd2", async () =>
       prisma.user.update({
         where: { id: created.id },
         data: { userName: "Updated Name" },
-      })
+      }),
     );
 
     expect(updated.userName).toBe("Updated Name");
@@ -138,11 +138,11 @@ describe("PrismaService User audit & soft-delete", () => {
           email: `${userCode}@example.com`,
           password: "hashed",
         },
-      })
+      }),
     );
 
     const deleted = await runAs("tester_del2", async () =>
-      prisma.user.delete({ where: { id: created.id } })
+      prisma.user.delete({ where: { id: created.id } }),
     );
 
     // delete 拦截为软删除，返回的是 update 后的记录

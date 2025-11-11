@@ -9,6 +9,7 @@ import { JwtAuthGuard } from "@/common/guard/jwt-auth.guard";
 import { ClsModule } from "nestjs-cls";
 import { PrismaService } from "./prisma/prisma.service";
 import { AuthModule } from "./auth/auth.module";
+import { DifyModule } from "./dify/dify.module";
 
 const envFilePath = process.env.NODE_ENV
   ? `.env.${process.env.NODE_ENV}`
@@ -29,6 +30,7 @@ const envFilePath = process.env.NODE_ENV
       },
     }),
     AuthModule,
+    DifyModule,
   ],
   controllers: [AppController],
   providers: [

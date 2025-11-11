@@ -31,6 +31,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.2.1",
     "@prisma/client": "^6.18.0",
+    "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
@@ -89,6 +90,8 @@
       "^@/(.*)$": "<rootDir>/$1",
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
-    "setupFilesAfterEnv": ["<rootDir>/test-setup.ts"]
+    "setupFilesAfterEnv": [
+      "<rootDir>/test-setup.ts"
+    ]
   }
 }

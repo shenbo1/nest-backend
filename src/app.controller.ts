@@ -8,12 +8,11 @@ import { ApiConfigService } from "./config";
 export class AppController {
   constructor(
     private readonly appService: AppService,
-    private readonly configService: ApiConfigService,
+    private readonly configService: ApiConfigService
   ) {}
 
   @Get()
   getHello(): Promise<any> {
-    console.log("new", new Date(new Date().toLocaleString()));
     return this.appService.getHello();
   }
 
