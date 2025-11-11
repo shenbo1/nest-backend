@@ -114,6 +114,7 @@ export class DifyController {
    * @example GET /dify/app-info
    */
   @Get("app-info")
+  @Public()
   @ApiOperation({ summary: "获取应用信息" })
   async getAppInfo() {
     return this.difyService.getAppInfo();
@@ -208,7 +209,7 @@ export class DifyController {
    */
   @Delete("messages/:id")
   @ApiOperation({ summary: "删除消息记录" })
-  async deleteMessage(@Param("id") id: string) {
+  async deleteMessage(@Param("id") id: number) {
     return this.difyService.deleteMessage(id);
   }
 }

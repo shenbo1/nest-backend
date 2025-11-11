@@ -16,7 +16,7 @@ export class DifyService {
 
   constructor(
     private readonly config: ApiConfigService,
-    private readonly prisma: PrismaService,
+    private readonly prisma: PrismaService
   ) {
     const { apiKey, baseUrl } = this.config.difyConfig;
 
@@ -42,7 +42,7 @@ export class DifyService {
     conversationId?: string,
     onEvent?: (event: StreamEvent) => void,
     onError?: (error: Error) => void,
-    onComplete?: () => void,
+    onComplete?: () => void
   ): Promise<void> {
     let fullAnswer = "";
     let finalConversationId = conversationId || "";
@@ -83,7 +83,7 @@ export class DifyService {
         });
         // 调用用户完成回调
         onComplete?.();
-      },
+      }
     );
   }
 
@@ -262,7 +262,7 @@ export class DifyService {
    * 删除消息记录
    * @param id 消息ID
    */
-  async deleteMessage(id: string) {
+  async deleteMessage(id: number) {
     return this.prisma.difyMessage.delete({
       where: { id },
     });

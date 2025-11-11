@@ -10,6 +10,12 @@ async function bootstrap() {
 
   const { swagger, port } = app.get(ApiConfigService);
 
+  app.enableCors({
+    origin: true, // 允许所有来源，生产环境应该具体指定
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+    credentials: true,
+  });
+
   if (swagger.enabled) {
     const config = new DocumentBuilder()
       .setTitle(swagger.title)
@@ -23,7 +29,7 @@ async function bootstrap() {
           in: "header",
           name: "Authorization",
         },
-        "bearerAuth",
+        "bearerAuth"
       )
       .build();
     const document = SwaggerModule.createDocument(app, config);
