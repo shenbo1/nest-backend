@@ -5,7 +5,16 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { ClsService } from "nestjs-cls";
 
-// 基于 Prisma v6 的扩展实现：使用 $extends 包装查询，自动注入 deleted=false （如果调用方未显式指定 deleted 条件）
+// 辅助函数:移除删除相关字段
+function omitDeletedFields<T extends Record<string, any>>(
+  record: T
+): Omit<T, "deleted" | "deletedAt" | "deletedBy"> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { deleted, deletedAt, deletedBy, ...rest } = record;
+  return rest;
+}
+
+// 基于 Prisma v6 的扩展实现:使用 $extends 包装查询,自动注入 deleted=false (如果调用方未显式指定 deleted 条件)
 @Injectable()
 export class PrismaService implements OnModuleInit {
   private readonly client: PrismaClient;
@@ -245,7 +254,10 @@ export class PrismaService implements OnModuleInit {
             if (!a.where || a.where.deleted === undefined) {
               a.where = { AND: [a.where ?? {}, { deleted: false }] };
             }
-            return query(a);
+            return query(a).then((records: any[]) => {
+              if (!records || !Array.isArray(records)) return records;
+              return records.map((record) => omitDeletedFields(record));
+            });
           },
           findFirst({
             model,
@@ -266,7 +278,10 @@ export class PrismaService implements OnModuleInit {
             if (!a.where || a.where.deleted === undefined) {
               a.where = { AND: [a.where ?? {}, { deleted: false }] };
             }
-            return query(a);
+            return query(a).then((record: any) => {
+              if (!record) return record;
+              return omitDeletedFields(record);
+            });
           },
           findUnique({
             model,
@@ -288,7 +303,8 @@ export class PrismaService implements OnModuleInit {
               if (record && record.deleted === true && !a.where?.deleted) {
                 return null;
               }
-              return record;
+              if (!record) return record;
+              return omitDeletedFields(record);
             });
           },
           findUniqueOrThrow({
@@ -311,7 +327,8 @@ export class PrismaService implements OnModuleInit {
               if (record && record.deleted === true && !a.where?.deleted) {
                 throw new Error(`${model} record is soft-deleted`);
               }
-              return record;
+              if (!record) return record;
+              return omitDeletedFields(record);
             });
           },
         },
