@@ -18,7 +18,7 @@ import { PrismaService } from "@/prisma/prisma.service";
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly prismaService: PrismaService,
+    private readonly prismaService: PrismaService
   ) {}
 
   @Public()
@@ -37,7 +37,6 @@ export class AuthController {
         password: "password",
       },
     });
-    console.log("ddd", ddd);
     return this.authService.create(createAuthDto);
   }
 

@@ -135,6 +135,7 @@ CREATE TABLE `dify_messages` (
     `role` ENUM('USER', 'ASSISTANT', 'SYSTEM') NOT NULL,
     `content_type` ENUM('TEXT', 'IMAGE', 'CARD', 'RECOMMEND', 'FILE') NOT NULL DEFAULT 'TEXT',
     `content` TEXT NOT NULL,
+    `status` ENUM('PENDING', 'STREAMING', 'COMPLETED', 'FAILED', 'STOPPED') NOT NULL DEFAULT 'COMPLETED',
     `parent_message_id` VARCHAR(255) NULL,
     `metadata` JSON NULL,
     `tokens` INTEGER NULL,
@@ -154,6 +155,7 @@ CREATE TABLE `dify_messages` (
     INDEX `dify_messages_created_at_idx`(`created_at`),
     INDEX `dify_messages_parent_message_id_idx`(`parent_message_id`),
     INDEX `dify_messages_content_type_idx`(`content_type`),
+    INDEX `dify_messages_status_idx`(`status`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 

@@ -9,6 +9,8 @@ model DifyMessage {
     // 消息内容类型: text(文本)、image(图片)、card(卡片)、recommend(推荐)、file(文件)
     contentType MessageContentType @default(TEXT) @map("content_type")
     content     String             @db.Text
+    // 消息状态: pending(等待中)、streaming(流式生成中)、completed(已完成)、failed(失败)、stopped(已停止)
+    status      MessageStatus      @default(COMPLETED)
 
     // 关联的父消息ID(用于追踪问答对)
     parentMessageId String? @map("parent_message_id") @db.VarChar(255)
@@ -29,10 +31,7 @@ model DifyMessage {
 
     @@index([conversationId])
     @@index([userId])
-    @@index([messageId])
     @@index([createdAt])
-    @@index([parentMessageId])
-    @@index([contentType])
     @@map("dify_messages")
 }
 
@@ -48,4 +47,12 @@ enum MessageContentType {
     CARD // 卡片
     RECOMMEND // 推荐
     FILE // 文件
+}
+
+enum MessageStatus {
+    PENDING // 等待中
+    STREAMING // 流式生成中
+    COMPLETED // 已完成
+    FAILED // 失败
+    STOPPED // 已停止
 }

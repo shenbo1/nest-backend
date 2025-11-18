@@ -47,6 +47,7 @@ export class DifyService {
     let fullAnswer = "";
     let finalConversationId = conversationId || "";
     let finalMessageId = "";
+    let hasError = false;
 
     return this.client.chatStream(
       {
@@ -66,10 +67,17 @@ export class DifyService {
           finalConversationId = event.conversation_id || finalConversationId;
           finalMessageId = event.message_id || "";
         }
+        // 检测错误事件
+        if (event.event === "error") {
+          hasError = true;
+        }
         // 调用用户回调
         onEvent?.(event);
       },
-      onError,
+      (error: Error) => {
+        hasError = true;
+        onError?.(error);
+      },
       () => {
         // 保存对话记录和消息
         void this.saveConversationWithMessages({
@@ -78,6 +86,7 @@ export class DifyService {
           query,
           answer: fullAnswer,
           messageId: finalMessageId,
+          status: hasError ? "FAILED" : "COMPLETED",
         }).catch((error) => {
           console.error("保存对话记录失败:", error);
         });
@@ -149,6 +158,7 @@ export class DifyService {
           role: "USER",
           contentType: MessageContentType.TEXT,
           content: data.query,
+          status: "COMPLETED",
         },
       });
 
@@ -162,6 +172,7 @@ export class DifyService {
           contentType: data.contentType || MessageContentType.TEXT,
           content: data.answer,
           parentMessageId: queryMessage.messageId,
+          status: data.status || "COMPLETED",
         },
       });
 
@@ -178,16 +189,38 @@ export class DifyService {
   }
 
   /**
-   * 获取用户的会话列表
+   * 获取用户的会话列表(分页)
    * @param userId 用户ID
-   * @param limit 返回数量
+   * @param page 页码(从1开始)
+   * @param limit 每页数量
    */
-  async getConversationHistory(userId: string, limit: number = 50) {
-    return this.prisma.difyConversation.findMany({
-      where: { userId, status: "ACTIVE" },
-      orderBy: { updatedAt: "desc" },
-      take: limit,
-    });
+  async getConversationHistory(
+    userId: string,
+    page: number = 1,
+    limit: number = 20
+  ) {
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.difyConversation.findMany({
+        where: { userId, status: "ACTIVE" },
+        orderBy: { updatedAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.difyConversation.count({
+        where: { userId, status: "ACTIVE" },
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      hasMore: skip + items.length < total,
+    };
   }
 
   /**
@@ -201,14 +234,38 @@ export class DifyService {
   }
 
   /**
-   * 获取特定会话的所有消息
+   * 获取特定会话的所有消息(分页)
    * @param conversationId 会话ID
+   * @param page 页码(从1开始)
+   * @param limit 每页数量
    */
-  async getConversationMessages(conversationId: string) {
-    return this.prisma.difyMessage.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: "asc" },
-    });
+  async getConversationMessages(
+    conversationId: string,
+    page: number = 1,
+    limit: number = 50
+  ) {
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.difyMessage.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.difyMessage.count({
+        where: { conversationId },
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      hasMore: skip + items.length < total,
+    };
   }
 
   /**
@@ -269,12 +326,30 @@ export class DifyService {
   }
 
   /**
-   * 获取会话列表(从 Dify API)
+   * 停止消息生成
+   * @param taskId 任务ID
    * @param user 用户标识
-   * @param limit 返回数量
    */
-  async getConversations(user: string, limit: number = 20) {
-    return this.client.getConversations(user, undefined, limit);
+  async stopChatMessage(taskId: string, user: string) {
+    // 调用 Dify API 停止消息生成
+    const result = await this.client.stopChatMessage(taskId, user);
+
+    // 更新消息状态为已停止
+    try {
+      await this.prisma.difyMessage.updateMany({
+        where: {
+          messageId: taskId,
+          status: "STREAMING",
+        },
+        data: {
+          status: "STOPPED",
+        },
+      });
+    } catch (error) {
+      console.error("更新消息状态失败:", error);
+    }
+
+    return result;
   }
 
   /**
@@ -293,6 +368,24 @@ export class DifyService {
    */
   async deleteConversation(conversationId: string, user: string) {
     return this.client.deleteConversation(conversationId, user);
+  }
+
+  /**
+   * 获取会话变量
+   * @param conversationId 会话ID
+   * @param user 用户标识
+   * @param variableName 变量名称（可选）
+   */
+  async getConversationVariables(
+    conversationId: string,
+    user: string,
+    variableName?: string
+  ) {
+    return this.client.getConversationVariables(
+      conversationId,
+      user,
+      variableName
+    );
   }
 
   /**

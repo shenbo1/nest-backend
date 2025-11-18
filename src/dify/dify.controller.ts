@@ -5,14 +5,12 @@ import {
   Body,
   Param,
   Delete,
-  Patch,
   Sse,
   Query,
   MessageEvent,
 } from "@nestjs/common";
 import { ApiQuery, ApiTags, ApiOperation } from "@nestjs/swagger";
 import { DifyService } from "./dify.service";
-import { CreateChatDto } from "./dto/create-chat.dto";
 import { Observable } from "rxjs";
 import type { StreamEvent } from "./types/dify-response.types";
 import { Public } from "@/common/guard/jwt-auth.guard";
@@ -43,7 +41,6 @@ export class DifyController {
     @Query("user") user: string,
     @Query("conversationId") conversationId?: string
   ): Observable<MessageEvent> {
-    console.log("date", new Date());
     return new Observable((subscriber) => {
       this.difyService
         .chatStream(
@@ -83,29 +80,59 @@ export class DifyController {
   }
 
   /**
-   * 获取用户的会话列表
-   * @example GET /dify/history?userId=user123&limit=50
+   * 停止消息生成
+   * @example POST /dify/chat/:taskId/stop
    */
-  @Get("history")
-  @ApiOperation({ summary: "获取用户的会话列表" })
-  @ApiQuery({ name: "limit", required: false, description: "返回数量" })
-  async getHistory(
-    @Query("userId") userId: string,
-    @Query("limit") limit?: number
+  @Post("chat/:taskId/stop")
+  @Public()
+  @ApiOperation({ summary: "停止消息生成" })
+  async stopChatMessage(
+    @Param("taskId") taskId: string,
+    @Body("user") user: string
   ) {
-    return this.difyService.getConversationHistory(userId, limit);
+    return this.difyService.stopChatMessage(taskId, user);
   }
 
   /**
-   * 获取特定会话的所有消息
-   * @example GET /dify/history/:conversationId/messages
+   * 获取用户的会话列表(分页)
+   * @example GET /dify/history?userId=user123&page=1&limit=20
    */
-  @Get("history/:conversationId/messages")
-  @ApiOperation({ summary: "获取会话的所有消息" })
-  async getConversationMessages(
-    @Param("conversationId") conversationId: string
+  @Get("history")
+  @ApiOperation({ summary: "获取用户的会话列表(分页)" })
+  @ApiQuery({ name: "page", required: false, description: "页码(从1开始)" })
+  @ApiQuery({ name: "limit", required: false, description: "每页数量" })
+  @Public()
+  async getHistory(
+    @Query("userId") userId: string,
+    @Query("page") page?: number,
+    @Query("limit") limit?: number
   ) {
-    return this.difyService.getConversationMessages(conversationId);
+    return this.difyService.getConversationHistory(
+      userId,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 20
+    );
+  }
+
+  /**
+   * 获取特定会话的所有消息(分页)
+   * @example GET /dify/history/:conversationId/messages?page=1&limit=50
+   */
+  @Public()
+  @Get("history/:conversationId/messages")
+  @ApiOperation({ summary: "获取会话的所有消息(分页)" })
+  @ApiQuery({ name: "page", required: false, description: "页码(从1开始)" })
+  @ApiQuery({ name: "limit", required: false, description: "每页数量" })
+  async getConversationMessages(
+    @Param("conversationId") conversationId: string,
+    @Query("page") page?: number,
+    @Query("limit") limit?: number
+  ) {
+    return this.difyService.getConversationMessages(
+      conversationId,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 50
+    );
   }
 
   /**
@@ -116,5 +143,29 @@ export class DifyController {
   @ApiOperation({ summary: "删除会话" })
   async deleteConversation(@Param("conversationId") conversationId: string) {
     return this.difyService.deleteConversationRecord(conversationId);
+  }
+
+  /**
+   * 获取会话变量
+   * @example GET /dify/conversations/:conversationId/variables?user=user123
+   */
+  @Get("conversations/:conversationId/variables")
+  @ApiOperation({ summary: "获取会话变量" })
+  @ApiQuery({ name: "user", required: true, description: "用户标识" })
+  @ApiQuery({
+    name: "variableName",
+    required: false,
+    description: "变量名称（可选）",
+  })
+  async getConversationVariables(
+    @Param("conversationId") conversationId: string,
+    @Query("user") user: string,
+    @Query("variableName") variableName?: string
+  ) {
+    return this.difyService.getConversationVariables(
+      conversationId,
+      user,
+      variableName
+    );
   }
 }

@@ -1,9 +1,10 @@
 /**
- * 消息类型枚举
+ * 消息角色枚举
  */
-export enum MessageType {
-  QUERY = "QUERY", // 用户问题
-  ANSWER = "ANSWER", // AI回答
+export enum MessageRole {
+  USER = "USER", // 用户
+  ASSISTANT = "ASSISTANT", // 助手
+  SYSTEM = "SYSTEM", // 系统
 }
 
 /**
@@ -12,13 +13,20 @@ export enum MessageType {
 export enum MessageContentType {
   TEXT = "TEXT", // 文本消息
   IMAGE = "IMAGE", // 图片
+  CARD = "CARD", // 卡片
+  RECOMMEND = "RECOMMEND", // 推荐
   FILE = "FILE", // 文件
-  AUDIO = "AUDIO", // 音频
-  VIDEO = "VIDEO", // 视频
-  MARKDOWN = "MARKDOWN", // Markdown格式
-  CODE = "CODE", // 代码
-  JSON = "JSON", // JSON数据
-  MIXED = "MIXED", // 混合类型(包含多种格式)
+}
+
+/**
+ * 消息状态枚举
+ */
+export enum MessageStatus {
+  PENDING = "PENDING", // 等待中
+  STREAMING = "STREAMING", // 流式生成中
+  COMPLETED = "COMPLETED", // 已完成
+  FAILED = "FAILED", // 失败
+  STOPPED = "STOPPED", // 已停止
 }
 
 /**
@@ -32,4 +40,11 @@ export interface SaveMessageData {
   messageId?: string;
   metadata?: any;
   contentType?: MessageContentType;
+  status?:
+    | MessageStatus
+    | "PENDING"
+    | "STREAMING"
+    | "COMPLETED"
+    | "FAILED"
+    | "STOPPED";
 }
