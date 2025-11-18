@@ -1,11 +1,34 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
-import { Injectable, OnModuleInit } from "@nestjs/common";
-import { PrismaClient } from "generated/prisma/client";
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from "@nestjs/common";
+import { PrismaClient, Prisma } from "generated/prisma/client";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { ClsService } from "nestjs-cls";
 
-// 辅助函数:移除删除相关字段
+// 审计信息接口
+interface AuditInfo {
+  hasDeleted: boolean;
+  hasCreatedAt: boolean;
+  hasCreatedBy: boolean;
+  hasUpdatedAt: boolean;
+  hasUpdatedBy: boolean;
+  hasDeletedAt: boolean;
+  hasDeletedBy: boolean;
+}
+
+// 动态获取可用的 Prisma model delegate 名称类型
+type ModelDelegateName = {
+  [K in keyof PrismaClient]: PrismaClient[K] extends { findMany: any }
+    ? K
+    : never;
+}[keyof PrismaClient];
+
+// 辅助函数: 移除删除相关字段
 function omitDeletedFields<T extends Record<string, any>>(
   record: T
 ): Omit<T, "deleted" | "deletedAt" | "deletedBy"> {
@@ -14,58 +37,279 @@ function omitDeletedFields<T extends Record<string, any>>(
   return rest;
 }
 
-// 基于 Prisma v6 的扩展实现:使用 $extends 包装查询,自动注入 deleted=false (如果调用方未显式指定 deleted 条件)
+// 辅助函数: 填充审计字段
+function fillAuditFields(
+  data: any,
+  info: AuditInfo,
+  type: "create" | "update" | "delete",
+  actor: string
+): any {
+  const result = { ...data };
+  const now = new Date();
+  if (type === "create") {
+    if (info.hasCreatedAt && result.createdAt === undefined) {
+      result.createdAt = now;
+    }
+    if (info.hasCreatedBy && result.createdBy === undefined) {
+      result.createdBy = actor;
+    }
+    if (info.hasDeleted && result.deleted === undefined) {
+      result.deleted = false;
+    }
+  }
+
+  if (type === "update" || type === "delete") {
+    if (info.hasUpdatedAt && result.updatedAt === undefined) {
+      result.updatedAt = now;
+    }
+    if (info.hasUpdatedBy && result.updatedBy === undefined) {
+      result.updatedBy = actor;
+    }
+  }
+
+  if (type === "delete") {
+    if (info.hasDeleted) result.deleted = true;
+    if (info.hasDeletedAt) result.deletedAt = now;
+    if (info.hasDeletedBy) result.deletedBy = actor;
+  }
+
+  return result;
+}
+
 @Injectable()
-export class PrismaService implements OnModuleInit {
+export class PrismaService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(PrismaService.name);
   private readonly client: PrismaClient;
+  private static auditMapCache: Record<string, AuditInfo> | null = null;
 
   constructor(private readonly cls: ClsService) {
-    const base = new PrismaClient();
-    const schemaPath = path.join(process.cwd(), "prisma", "schema.prisma");
-    interface AuditInfo {
-      hasDeleted: boolean;
-      hasCreatedAt: boolean;
-      hasCreatedBy: boolean;
-      hasUpdatedAt: boolean;
-      hasUpdatedBy: boolean;
-      hasDeletedAt: boolean;
-      hasDeletedBy: boolean;
+    this.client = this.createExtendedClient();
+  }
+
+  /**
+   * 获取当前操作者
+   */
+  private getActor(): string {
+    const u = this.cls.get<{ userCode?: string; id?: string }>("user");
+    return u?.userCode ?? u?.id ?? "system";
+  }
+
+  /**
+   * 软删除过滤（支持 includeDeleted 选项）
+   * @param info 审计信息
+   * @param args 查询参数
+   * @param isUniqueQuery 是否是唯一查询(findUnique/findUniqueOrThrow)
+   */
+  private applySoftDeleteFilter(
+    info: AuditInfo | undefined,
+    args: any,
+    isUniqueQuery = false
+  ): any {
+    if (!info?.hasDeleted) return args;
+    if (args?.includeDeleted) {
+      delete args.includeDeleted;
+      return args;
     }
-    const auditMap: Record<string, AuditInfo> = {};
-    // 定义 models 目录与收集工具
-    const modelsDir = path.join(process.cwd(), "prisma", "models");
-    const collectPrismaFiles = (dir: string): string => {
-      let acc = "";
-      if (!fs.existsSync(dir)) return acc;
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const p = path.join(dir, entry.name);
-        if (entry.isDirectory()) acc += "\n" + collectPrismaFiles(p);
-        else if (entry.isFile() && entry.name.endsWith(".prisma")) {
-          try {
-            acc += "\n" + fs.readFileSync(p, "utf8");
-          } catch {
-            // ignore
-          }
-        }
+    if (!args.where || args.where.deleted === undefined) {
+      // findUnique/findUniqueOrThrow 不能使用 AND,直接在 where 上添加 deleted 字段
+      if (isUniqueQuery) {
+        args.where = { ...args.where, deleted: false };
+      } else {
+        args.where = { AND: [args.where ?? {}, { deleted: false }] };
       }
-      return acc;
-    };
+    }
+    return args;
+  }
+
+  /**
+   * 创建带审计和软删除扩展的 Prisma Client
+   */
+  private createExtendedClient(): PrismaClient {
+    const base = new PrismaClient();
+    const auditMap = this.getOrBuildAuditMap();
+
+    return base.$extends({
+      query: {
+        $allModels: {
+          create: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            if (info) {
+              args.data = fillAuditFields(
+                args.data ?? {},
+                info,
+                "create",
+                this.getActor()
+              );
+            }
+            return query(args);
+          },
+
+          createMany: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            if (info && Array.isArray(args.data)) {
+              const actor = this.getActor();
+              args.data = args.data.map((d: any) =>
+                fillAuditFields(d, info, "create", actor)
+              );
+            }
+            return query(args);
+          },
+
+          update: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            if (info) {
+              args.data = fillAuditFields(
+                args.data ?? {},
+                info,
+                "update",
+                this.getActor()
+              );
+            }
+            return query(args);
+          },
+
+          updateMany: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            if (info) {
+              args.data = fillAuditFields(
+                args.data ?? {},
+                info,
+                "update",
+                this.getActor()
+              );
+            }
+            return query(args);
+          },
+
+          delete: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            if (!info?.hasDeleted) {
+              return query(args);
+            }
+            const data = fillAuditFields({}, info, "delete", this.getActor());
+            return (base as any)[model].update({
+              where: args.where,
+              data,
+            });
+          },
+
+          deleteMany: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            if (!info?.hasDeleted) {
+              return query(args);
+            }
+            const data = fillAuditFields({}, info, "delete", this.getActor());
+            return (base as any)[model].updateMany({
+              where: args.where,
+              data,
+            });
+          },
+
+          findMany: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            const shouldOmit = !args?.includeDeleted;
+            const a = this.applySoftDeleteFilter(info, args);
+
+            return query(a).then((records: any[]) => {
+              if (!records || !Array.isArray(records)) return records;
+              return shouldOmit && info?.hasDeleted
+                ? records.map((record) => omitDeletedFields(record))
+                : records;
+            });
+          },
+
+          findFirst: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            const shouldOmit = !args?.includeDeleted;
+            const a = this.applySoftDeleteFilter(info, args);
+
+            return query(a).then((record: any) =>
+              record && shouldOmit && info?.hasDeleted
+                ? omitDeletedFields(record)
+                : record
+            );
+          },
+
+          findUnique: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            const shouldOmit = !args?.includeDeleted;
+            const a = this.applySoftDeleteFilter(info, args, true);
+
+            return query(a).then((record: any) =>
+              record && shouldOmit && info?.hasDeleted
+                ? omitDeletedFields(record)
+                : record
+            );
+          },
+
+          findUniqueOrThrow: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            const shouldOmit = !args?.includeDeleted;
+            const a = this.applySoftDeleteFilter(info, args, true);
+
+            return query(a).then((record: any) =>
+              record && shouldOmit && info?.hasDeleted
+                ? omitDeletedFields(record)
+                : record
+            );
+          },
+
+          count: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            return query(this.applySoftDeleteFilter(info, args));
+          },
+
+          aggregate: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            return query(this.applySoftDeleteFilter(info, args));
+          },
+
+          groupBy: ({ model, args, query }: any) => {
+            const info = auditMap[model];
+            return query(this.applySoftDeleteFilter(info, args));
+          },
+        },
+      },
+    }) as unknown as PrismaClient;
+  }
+
+  /**
+   * 获取或构建审计字段映射表（带缓存）
+   */
+  private getOrBuildAuditMap(): Record<string, AuditInfo> {
+    // 如果已有缓存，直接返回
+    if (PrismaService.auditMapCache) {
+      return PrismaService.auditMapCache;
+    }
+
+    const auditMap: Record<string, AuditInfo> = {};
+    const schemaPath = path.join(process.cwd(), "prisma", "schema.prisma");
+    const modelsDir = path.join(process.cwd(), "prisma", "models");
+
     try {
-      let raw = collectPrismaFiles(modelsDir);
+      let raw = this.collectPrismaFiles(modelsDir);
+
       // 若 models 目录为空，则回退到主 schema.prisma
       if (!raw.trim().length) {
         try {
           raw = fs.readFileSync(schemaPath, "utf8");
-        } catch {
+        } catch (error) {
+          this.logger.warn(
+            `无法读取 schema.prisma: ${error instanceof Error ? error.message : String(error)}`
+          );
           raw = "";
         }
       }
+
+      // 解析所有 model
       const modelRegex = /model\s+(\w+)\s*\{([^}]*)\}/gms;
       for (const match of raw.matchAll(modelRegex)) {
         const name = match[1];
         const body = match[2];
+
         const hasField = (f: string) =>
           new RegExp(`^\\s*${f}\\s+`, "m").test(body);
+
         auditMap[name] = {
           hasDeleted: /\bdeleted\s+Boolean\b/.test(body),
           hasCreatedAt: hasField("createdAt"),
@@ -76,273 +320,70 @@ export class PrismaService implements OnModuleInit {
           hasDeletedBy: hasField("deletedBy"),
         };
       }
-    } catch {
-      // 忽略读取错误，保持空表
+
+      // 缓存结果
+      PrismaService.auditMapCache = auditMap;
+      this.logger.log(
+        `成功解析 ${Object.keys(auditMap).length} 个 Prisma models`
+      );
+    } catch (error) {
+      this.logger.error(
+        `解析 Prisma schema 时出错: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
 
-    const now = () => new Date();
-    const actor = () => {
-      const u = this.cls.get<{ userCode?: string; id?: string }>("user");
-      return u?.userCode ?? u?.id ?? "system";
-    };
+    return auditMap;
+  }
 
-    const extended = base.$extends({
-      query: {
-        $allModels: {
-          create({
-            model,
-            args,
-            query,
-          }: {
-            model: string;
-            args: any;
-            query: any;
-          }) {
-            const info = auditMap[model];
-            if (info) {
-              const data: any = args.data ?? {};
-              if (info.hasCreatedAt && data.createdAt === undefined) {
-                data.createdAt = now();
-              }
-              if (info.hasCreatedBy && data.createdBy === undefined) {
-                data.createdBy = actor();
-              }
-              if (info.hasDeleted && data.deleted === undefined) {
-                data.deleted = false;
-              }
-              args.data = data;
-            }
-            return query(args);
-          },
-          createMany({
-            model,
-            args,
-            query,
-          }: {
-            model: string;
-            args: any;
-            query: any;
-          }) {
-            const info = auditMap[model];
-            if (info && Array.isArray(args.data)) {
-              args.data = args.data.map((d: any) => {
-                const data = { ...d };
-                if (info.hasCreatedAt && data.createdAt === undefined) {
-                  data.createdAt = now();
-                }
-                if (info.hasCreatedBy && data.createdBy === undefined) {
-                  data.createdBy = actor();
-                }
-                if (info.hasDeleted && data.deleted === undefined) {
-                  data.deleted = false;
-                }
-                return data;
-              });
-            }
-            return query(args);
-          },
-          update({
-            model,
-            args,
-            query,
-          }: {
-            model: string;
-            args: any;
-            query: any;
-          }) {
-            const info = auditMap[model];
-            if (info) {
-              const data: any = args.data ?? {};
-              if (info.hasUpdatedAt && data.updatedAt === undefined) {
-                data.updatedAt = now();
-              }
-              if (info.hasUpdatedBy && data.updatedBy === undefined) {
-                data.updatedBy = actor();
-              }
-              args.data = data;
-            }
-            return query(args);
-          },
-          updateMany({
-            model,
-            args,
-            query,
-          }: {
-            model: string;
-            args: any;
-            query: any;
-          }) {
-            const info = auditMap[model];
-            if (info) {
-              const data: any = args.data ?? {};
-              if (info.hasUpdatedAt && data.updatedAt === undefined) {
-                data.updatedAt = now();
-              }
-              if (info.hasUpdatedBy && data.updatedBy === undefined) {
-                data.updatedBy = actor();
-              }
-              args.data = data;
-            }
-            return query(args);
-          },
-          delete({
-            model,
-            args,
-            query,
-          }: {
-            model: string;
-            args: any;
-            query: any;
-          }) {
-            const info = auditMap[model];
-            if (!info?.hasDeleted) {
-              return query(args);
-            }
-            const data: any = {};
-            if (info.hasDeleted) data.deleted = true;
-            if (info.hasDeletedAt) data.deletedAt = now();
-            if (info.hasDeletedBy) data.deletedBy = actor();
-            if (info.hasUpdatedAt) data.updatedAt = now();
-            if (info.hasUpdatedBy) data.updatedBy = actor();
-            // 使用 base client 直接调用 update,避免扩展递归
-            return (base as any)[model].update({
-              where: args.where,
-              data,
-            });
-          },
-          deleteMany({
-            model,
-            args,
-            query,
-          }: {
-            model: string;
-            args: any;
-            query: any;
-          }) {
-            const info = auditMap[model];
-            if (!info?.hasDeleted) {
-              return query(args);
-            }
-            const data: any = {};
-            if (info.hasDeleted) data.deleted = true;
-            if (info.hasDeletedAt) data.deletedAt = now();
-            if (info.hasDeletedBy) data.deletedBy = actor();
-            if (info.hasUpdatedAt) data.updatedAt = now();
-            if (info.hasUpdatedBy) data.updatedBy = actor();
-            // 使用 base client 直接调用 updateMany,避免扩展递归
-            return (base as any)[model].updateMany({
-              where: args.where,
-              data,
-            });
-          },
-          findMany({
-            model,
-            args,
-            query,
-          }: {
-            model: string;
-            args: any;
-            query: any;
-          }) {
-            const info = auditMap[model];
-            if (!info?.hasDeleted) return query(args);
-            const a: any = args;
-            if (a?.includeDeleted) {
-              delete a.includeDeleted;
-              return query(a);
-            }
-            if (!a.where || a.where.deleted === undefined) {
-              a.where = { AND: [a.where ?? {}, { deleted: false }] };
-            }
-            return query(a).then((records: any[]) => {
-              if (!records || !Array.isArray(records)) return records;
-              return records.map((record) => omitDeletedFields(record));
-            });
-          },
-          findFirst({
-            model,
-            args,
-            query,
-          }: {
-            model: string;
-            args: any;
-            query: any;
-          }) {
-            const info = auditMap[model];
-            if (!info?.hasDeleted) return query(args);
-            const a: any = args;
-            if (a?.includeDeleted) {
-              delete a.includeDeleted;
-              return query(a);
-            }
-            if (!a.where || a.where.deleted === undefined) {
-              a.where = { AND: [a.where ?? {}, { deleted: false }] };
-            }
-            return query(a).then((record: any) => {
-              if (!record) return record;
-              return omitDeletedFields(record);
-            });
-          },
-          findUnique({
-            model,
-            args,
-            query,
-          }: {
-            model: string;
-            args: any;
-            query: any;
-          }) {
-            const info = auditMap[model];
-            if (!info?.hasDeleted) return query(args);
-            const a: any = args;
-            if (a?.includeDeleted) {
-              delete a.includeDeleted;
-              return query(a);
-            }
-            return query(a).then((record: any) => {
-              if (record && record.deleted === true && !a.where?.deleted) {
-                return null;
-              }
-              if (!record) return record;
-              return omitDeletedFields(record);
-            });
-          },
-          findUniqueOrThrow({
-            model,
-            args,
-            query,
-          }: {
-            model: string;
-            args: any;
-            query: any;
-          }) {
-            const info = auditMap[model];
-            if (!info?.hasDeleted) return query(args);
-            const a: any = args;
-            if (a?.includeDeleted) {
-              delete a.includeDeleted;
-              return query(a);
-            }
-            return query(a).then((record: any) => {
-              if (record && record.deleted === true && !a.where?.deleted) {
-                throw new Error(`${model} record is soft-deleted`);
-              }
-              if (!record) return record;
-              return omitDeletedFields(record);
-            });
-          },
-        },
-      },
-    });
-    // 将扩展实例断言为 PrismaClient，以保持对外 API 类型
-    this.client = extended as unknown as PrismaClient;
+  /**
+   * 递归收集所有 .prisma 文件内容
+   */
+  private collectPrismaFiles(dir: string): string {
+    let acc = "";
+    if (!fs.existsSync(dir)) return acc;
+
+    try {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          acc += "\n" + this.collectPrismaFiles(p);
+        } else if (entry.isFile() && entry.name.endsWith(".prisma")) {
+          try {
+            acc += "\n" + fs.readFileSync(p, "utf8");
+          } catch (error) {
+            this.logger.warn(
+              `无法读取文件 ${p}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        }
+      }
+    } catch (error) {
+      this.logger.warn(
+        `读取目录 ${dir} 时出错: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    return acc;
   }
 
   async onModuleInit() {
-    await this.client.$connect();
+    try {
+      await this.client.$connect();
+      this.logger.log("Prisma Client 连接成功");
+    } catch (error) {
+      this.logger.error(
+        `Prisma Client 连接失败: ${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
+    }
   }
 
-  // 暴露原生 delegate，兼容现有使用方式
+  async onModuleDestroy() {
+    await this.client.$disconnect();
+    this.logger.log("Prisma Client 已断开连接");
+  }
+
+  // Model 访问器
   get user() {
     return this.client.user;
   }
@@ -358,7 +399,19 @@ export class PrismaService implements OnModuleInit {
   get userRole() {
     return this.client.userRole;
   }
-  /* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+  get difyConversation() {
+    return this.client.difyConversation;
+  }
+  get difyMessage() {
+    return this.client.difyMessage;
+  }
+
+  // 动态获取任意 model delegate（带类型）
+  getModel<K extends ModelDelegateName>(name: K): PrismaClient[K] {
+    return (this.client as any)[name];
+  }
+
+  // Prisma 原生方法
   $transaction(...args: any[]) {
     return (this.client as any).$transaction(...args);
   }
@@ -368,7 +421,6 @@ export class PrismaService implements OnModuleInit {
   $executeRaw(...args: any[]) {
     return (this.client as any).$executeRaw(...args);
   }
-  /* eslint-enable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
   $disconnect() {
     return this.client.$disconnect();
   }
