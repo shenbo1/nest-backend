@@ -13,7 +13,9 @@ import { ApiQuery, ApiTags, ApiOperation } from "@nestjs/swagger";
 import { DifyService } from "./dify.service";
 import { Observable } from "rxjs";
 import type { StreamEvent } from "./types/dify-response.types";
+import type { SaveMessageData } from "./types/message.types";
 import { Public } from "@/common/guard/jwt-auth.guard";
+import { CurrentUser } from "@/common/decorator/current-user";
 
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 
@@ -27,10 +29,8 @@ export class DifyController {
    * @example GET /dify/chat/stream?query=你好&user=user123&conversationId=abc
    */
   @Sse("chat/stream")
-  @Public()
   @ApiOperation({ summary: "流式聊天" })
   @ApiQuery({ name: "query", required: true, description: "聊天内容" })
-  @ApiQuery({ name: "user", required: true, description: "用户ID" })
   @ApiQuery({
     name: "conversationId",
     required: false,
@@ -38,14 +38,14 @@ export class DifyController {
   })
   chatStream(
     @Query("query") query: string,
-    @Query("user") user: string,
-    @Query("conversationId") conversationId?: string
+    @Query("conversationId") conversationId?: string,
+    @CurrentUser() currentUser?: { mobile: string; memberId: string }
   ): Observable<MessageEvent> {
     return new Observable((subscriber) => {
       this.difyService
         .chatStream(
           query,
-          user,
+          currentUser?.memberId.toString() ?? "",
           conversationId,
           (event: StreamEvent) => {
             // 发送流式事件给客户端
@@ -73,7 +73,6 @@ export class DifyController {
    * @example GET /dify/app-info
    */
   @Get("app-info")
-  @Public()
   @ApiOperation({ summary: "获取应用信息" })
   async getAppInfo() {
     return this.difyService.getAppInfo();
@@ -84,7 +83,6 @@ export class DifyController {
    * @example POST /dify/chat/:taskId/stop
    */
   @Post("chat/:taskId/stop")
-  @Public()
   @ApiOperation({ summary: "停止消息生成" })
   async stopChatMessage(
     @Param("taskId") taskId: string,
@@ -101,14 +99,13 @@ export class DifyController {
   @ApiOperation({ summary: "获取用户的会话列表(分页)" })
   @ApiQuery({ name: "page", required: false, description: "页码(从1开始)" })
   @ApiQuery({ name: "limit", required: false, description: "每页数量" })
-  @Public()
   async getHistory(
-    @Query("userId") userId: string,
+    @CurrentUser() currentUser?: { mobile: string; memberId: string },
     @Query("page") page?: number,
     @Query("limit") limit?: number
   ) {
     return this.difyService.getConversationHistory(
-      userId,
+      currentUser?.memberId.toString() ?? "",
       page ? Number(page) : 1,
       limit ? Number(limit) : 20
     );
@@ -118,7 +115,6 @@ export class DifyController {
    * 获取特定会话的所有消息(分页)
    * @example GET /dify/history/:conversationId/messages?page=1&limit=50
    */
-  @Public()
   @Get("history/:conversationId/messages")
   @ApiOperation({ summary: "获取会话的所有消息(分页)" })
   @ApiQuery({ name: "page", required: false, description: "页码(从1开始)" })
@@ -151,7 +147,6 @@ export class DifyController {
    */
   @Get("conversations/:conversationId/variables")
   @ApiOperation({ summary: "获取会话变量" })
-  @ApiQuery({ name: "user", required: true, description: "用户标识" })
   @ApiQuery({
     name: "variableName",
     required: false,
@@ -159,13 +154,75 @@ export class DifyController {
   })
   async getConversationVariables(
     @Param("conversationId") conversationId: string,
-    @Query("user") user: string,
-    @Query("variableName") variableName?: string
+
+    @Query("variableName") variableName?: string,
+    @CurrentUser() currentUser?: { mobile: string; memberId: string }
   ) {
     return this.difyService.getConversationVariables(
       conversationId,
-      user,
+      currentUser?.memberId.toString() ?? "",
       variableName
     );
+  }
+
+  /**
+   * 更新会话变量
+   * @example POST /dify/conversations/variables
+   */
+  @Post("conversations/variables")
+  @ApiOperation({ summary: "更新会话变量" })
+  async updateConversationVariable(
+    @Body("conversationId") conversationId: string,
+    @Body("variableId") variableId: string,
+
+    @Body("value") value: string,
+    @CurrentUser() currentUser?: { mobile: string; memberId: string }
+  ) {
+    return this.difyService.updateConversationVariable(
+      conversationId,
+      variableId,
+      currentUser?.memberId.toString() ?? "",
+      value
+    );
+  }
+
+  /**
+   * 保存找房结果
+   * @example POST /dify/house-search-result
+   */
+  @Post("house-search-result")
+  @ApiOperation({ summary: "保存找房结果" })
+  async saveHouseSearchResult(
+    @Body()
+    body: {
+      conversationId: string;
+
+      searchParams: Record<string, any>;
+      result: Record<string, any>;
+      messageId?: string;
+    },
+    @CurrentUser() currentUser?: { mobile: string; memberId: string }
+  ) {
+    return await this.difyService.saveHouseSearchResult(
+      body.conversationId,
+      currentUser?.memberId.toString() ?? "",
+      body.searchParams,
+      body.result,
+      body.messageId
+    );
+  }
+
+  /**
+   * 保存对话和消息
+   * @example POST /dify/save-conversation
+   */
+  @Post("save-conversation")
+  @ApiOperation({ summary: "保存对话和消息" })
+  async saveConversation(
+    @Body() body: SaveMessageData,
+    @CurrentUser() currentUser?: { mobile: string; memberId: string }
+  ) {
+    body.userId = currentUser?.memberId.toString() ?? "";
+    return await this.difyService.saveConversationWithMessages(body);
   }
 }

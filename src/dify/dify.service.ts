@@ -10,6 +10,25 @@ import {
 
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 
+/**
+ * 清理 AI 回答中的 [SEARCH_PARAMS] 和后面的 JSON 内容
+ */
+function cleanAnswer(answer: string): string {
+  if (!answer) return answer;
+
+  // 移除 [SEARCH_PARAMS] 及其后面的 JSON 内容
+  // 匹配模式: [SEARCH_PARAMS] 后跟任意空白字符,然后是 JSON 对象或数组
+  let cleaned = answer.replace(
+    /\[SEARCH_PARAMS\]\s*(\{[\s\S]*?\}|\[[\s\S]*?\])/g,
+    ""
+  );
+
+  // 清理多余的空行
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+
+  return cleaned;
+}
+
 @Injectable()
 export class DifyService {
   private readonly client: DifyClient;
@@ -80,16 +99,16 @@ export class DifyService {
       },
       () => {
         // 保存对话记录和消息
-        void this.saveConversationWithMessages({
-          conversationId: finalConversationId,
-          userId: user,
-          query,
-          answer: fullAnswer,
-          messageId: finalMessageId,
-          status: hasError ? "FAILED" : "COMPLETED",
-        }).catch((error) => {
-          console.error("保存对话记录失败:", error);
-        });
+        // void this.saveConversationWithMessages({
+        //   conversationId: finalConversationId,
+        //   userId: user,
+        //   query,
+        //   answer: cleanAnswer(fullAnswer),
+        //   messageId: finalMessageId,
+        //   status: hasError ? "FAILED" : "COMPLETED",
+        // }).catch((error) => {
+        //   console.error("保存对话记录失败:", error);
+        // });
         // 调用用户完成回调
         onComplete?.();
       }
@@ -116,7 +135,7 @@ export class DifyService {
         conversationId: result.conversation_id,
         userId: user,
         query,
-        answer: result.answer,
+        answer: cleanAnswer(result.answer),
         messageId: result.message_id,
         metadata: result.metadata,
       });
@@ -130,7 +149,7 @@ export class DifyService {
   /**
    * 保存对话记录和消息(使用事务)
    */
-  private async saveConversationWithMessages(data: SaveMessageData) {
+  async saveConversationWithMessages(data: SaveMessageData) {
     return this.prisma.$transaction(async (tx) => {
       // 1. 确保会话存在(如果不存在则创建)
       let conversation = await tx.difyConversation.findUnique({
@@ -386,6 +405,60 @@ export class DifyService {
       user,
       variableName
     );
+  }
+
+  /**
+   * 更新会话变量
+   * @param conversationId 会话ID
+   * @param variableId 变量ID
+   * @param user 用户标识
+   * @param value 变量值
+   */
+  async updateConversationVariable(
+    conversationId: string,
+    variableId: string,
+    user: string,
+    value: string
+  ) {
+    return this.client.updateConversationVariable(
+      conversationId,
+      variableId,
+      user,
+      value
+    );
+  }
+
+  /**
+   * 保存找房结果消息
+   * @param conversationId 会话ID
+   * @param userId 用户ID
+   * @param searchParams 查询参数
+   * @param result 找房结果数据
+   * @param messageId 消息ID(可选)
+   */
+  async saveHouseSearchResult(
+    conversationId: string,
+    userId: string,
+    searchParams: Record<string, any>,
+    result: Record<string, any>,
+    messageId?: string
+  ) {
+    return this.prisma.difyMessage.create({
+      data: {
+        conversationId,
+        messageId: messageId || `${conversationId}_house_${Date.now()}`,
+        userId,
+        role: "ASSISTANT",
+        contentType: MessageContentType.CARD, // 使用卡片类型
+        content: JSON.stringify(result), // 找房结果数据
+        metadata: {
+          type: "house_search",
+          searchParams, // 保存查询参数
+          timestamp: new Date().toISOString(),
+        },
+        status: "COMPLETED",
+      },
+    });
   }
 
   /**

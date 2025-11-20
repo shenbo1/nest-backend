@@ -56,7 +56,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     this.logger.error(
       `${request.method} ${request.url} -> ${message}`,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      (exception as any)?.stack,
+      (exception as any)?.stack
     );
 
     response.status(status).json(responseBody);
