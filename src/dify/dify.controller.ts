@@ -8,6 +8,8 @@ import {
   Sse,
   Query,
   MessageEvent,
+  ParseBoolPipe,
+  DefaultValuePipe,
 } from "@nestjs/common";
 import { ApiQuery, ApiTags, ApiOperation } from "@nestjs/swagger";
 import { DifyService } from "./dify.service";
@@ -36,9 +38,16 @@ export class DifyController {
     required: false,
     description: "会话ID(可选)",
   })
+  @ApiQuery({
+    name: "needAnswer",
+    required: false,
+    description: "会话回答是不是记录",
+  })
   chatStream(
     @Query("query") query: string,
     @Query("conversationId") conversationId?: string,
+    @Query("needAnswer", new DefaultValuePipe(true), ParseBoolPipe)
+    needAnswer?: boolean,
     @CurrentUser() currentUser?: { mobile: string; memberId: string }
   ): Observable<MessageEvent> {
     return new Observable((subscriber) => {
@@ -47,6 +56,7 @@ export class DifyController {
           query,
           currentUser?.memberId.toString() ?? "",
           conversationId,
+          needAnswer,
           (event: StreamEvent) => {
             // 发送流式事件给客户端
             subscriber.next({

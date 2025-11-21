@@ -59,6 +59,7 @@ export class DifyService {
     query: string,
     user: string,
     conversationId?: string,
+    needAnswer?: boolean,
     onEvent?: (event: StreamEvent) => void,
     onError?: (error: Error) => void,
     onComplete?: () => void
@@ -98,17 +99,16 @@ export class DifyService {
         onError?.(error);
       },
       () => {
-        // 保存对话记录和消息
-        // void this.saveConversationWithMessages({
-        //   conversationId: finalConversationId,
-        //   userId: user,
-        //   query,
-        //   answer: cleanAnswer(fullAnswer),
-        //   messageId: finalMessageId,
-        //   status: hasError ? "FAILED" : "COMPLETED",
-        // }).catch((error) => {
-        //   console.error("保存对话记录失败:", error);
-        // });
+        void this.saveConversationWithMessages({
+          conversationId: finalConversationId,
+          userId: user,
+          query,
+          answer: needAnswer ? cleanAnswer(fullAnswer) : "",
+          messageId: finalMessageId,
+          status: hasError ? "FAILED" : "COMPLETED",
+        }).catch((error) => {
+          console.error("保存对话记录失败:", error);
+        });
         // 调用用户完成回调
         onComplete?.();
       }
@@ -116,40 +116,10 @@ export class DifyService {
   }
 
   /**
-   * 阻塞式聊天
-   * @param query 用户查询
-   * @param user 用户标识
-   * @param conversationId 会话ID（可选）
-   */
-  async chat(query: string, user: string, conversationId?: string) {
-    const result = await this.client.chatMessages({
-      query,
-      user,
-      conversation_id: conversationId,
-      response_mode: "blocking",
-    });
-
-    // 保存对话记录和消息
-    try {
-      await this.saveConversationWithMessages({
-        conversationId: result.conversation_id,
-        userId: user,
-        query,
-        answer: cleanAnswer(result.answer),
-        messageId: result.message_id,
-        metadata: result.metadata,
-      });
-    } catch (error) {
-      console.error("保存对话记录失败:", error);
-    }
-
-    return result;
-  }
-
-  /**
    * 保存对话记录和消息(使用事务)
    */
   async saveConversationWithMessages(data: SaveMessageData) {
+    let count = 0;
     return this.prisma.$transaction(async (tx) => {
       // 1. 确保会话存在(如果不存在则创建)
       let conversation = await tx.difyConversation.findUnique({
@@ -167,39 +137,48 @@ export class DifyService {
           },
         });
       }
-
+      let queryMessage = null;
       // 2. 保存用户问题消息
-      const queryMessage = await tx.difyMessage.create({
-        data: {
-          conversationId: data.conversationId,
-          messageId: `${data.messageId}_query`,
-          userId: data.userId,
-          role: "USER",
-          contentType: MessageContentType.TEXT,
-          content: data.query,
-          status: "COMPLETED",
-        },
-      });
+      if (data.query && data.query.trim() !== "") {
+        queryMessage = await tx.difyMessage.create({
+          data: {
+            conversationId: data.conversationId,
+            messageId: `${data.messageId}_query`,
+            userId: data.userId,
+            role: "USER",
+            contentType: data.queryType || MessageContentType.TEXT,
+            content: data.query,
+            status: "COMPLETED",
+            metadata: data.metadata,
+          },
+        });
+        count++;
+      }
 
-      // 3. 保存AI回答消息
-      const answerMessage = await tx.difyMessage.create({
-        data: {
-          conversationId: data.conversationId,
-          messageId: data.messageId || `${data.conversationId}_answer`,
-          userId: data.userId,
-          role: "ASSISTANT",
-          contentType: data.contentType || MessageContentType.TEXT,
-          content: data.answer,
-          parentMessageId: queryMessage.messageId,
-          status: data.status || "COMPLETED",
-        },
-      });
+      let answerMessage = null;
+      if (data.answer && data.answer?.trim() !== "") {
+        // 3. 保存AI回答消息
+        answerMessage = await tx.difyMessage.create({
+          data: {
+            conversationId: data.conversationId,
+            messageId: data.messageId || `${data.conversationId}_answer`,
+            userId: data.userId,
+            role: "ASSISTANT",
+            contentType: data.answerType || MessageContentType.TEXT,
+            content: data.answer,
+            parentMessageId: `${data.messageId}_query`,
+            status: data.status || "COMPLETED",
+            metadata: data.metadata,
+          },
+        });
+        count++;
+      }
 
       // 4. 更新会话的消息计数
       await tx.difyConversation.update({
         where: { conversationId: data.conversationId },
         data: {
-          messageCount: { increment: 2 }, // 问题+回答=2条消息
+          messageCount: { increment: count }, // 问题+回答=2条消息
         },
       });
 

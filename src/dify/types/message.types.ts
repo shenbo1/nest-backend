@@ -39,7 +39,8 @@ export interface SaveMessageData {
   answer: string;
   messageId?: string;
   metadata?: any;
-  contentType?: MessageContentType;
+  queryType?: MessageContentType;
+  answerType?: MessageContentType;
   status?:
     | MessageStatus
     | "PENDING"
